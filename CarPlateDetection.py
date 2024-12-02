@@ -3,14 +3,9 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
-import kagglehub
 
-model = YOLO("yolo11n.pt")
-
-results = model.train(data="CarPlates/Lamine.yaml", epochs=20, imgsz=640)
-
-IMG_DATA = "../dataset/{}/images"
-LABELA_DATA = "../dataset/{}/labels"
+IMG_DATA = "dataset/{}/images"
+LABELA_DATA = "dataset/{}/labels"
 
 def preprocess_bbox(bbox_data, img_height, img_width):
     
@@ -49,5 +44,8 @@ def plot_labeled_data(mode='train'):
         fig.add_subplot(rows, columns, i+1) 
         plt.imshow(img)
     plt.show()
-    
-plot_labeled_data()
+
+if __name__ == "__main__":
+    model = YOLO("yolo11n.pt")
+    results = model.train(data="Lamine.yaml", epochs=10, imgsz=640, device=0)
+    plot_labeled_data()

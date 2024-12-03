@@ -3,6 +3,7 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
+import random
 
 IMG_DATA = "dataset/{}/images"
 LABELA_DATA = "dataset/{}/labels"
@@ -27,6 +28,8 @@ def plot_labeled_data(mode='train'):
     columns = 4
     
     imgs_list = os.listdir(IMG_DATA.format(mode))
+    random.shuffle(imgs_list)
+
     labels_list = os.listdir(LABELA_DATA.format(mode))
     
     for i, img_name in enumerate(imgs_list[:16]):
@@ -47,5 +50,5 @@ def plot_labeled_data(mode='train'):
 
 if __name__ == "__main__":
     model = YOLO("yolo11n.pt")
-    results = model.train(data="Lamine.yaml", epochs=10, imgsz=640, device=0)
+    #results = model.train(data="Lamine.yaml", epochs=10, imgsz=640, device=0)
     plot_labeled_data()

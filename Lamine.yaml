@@ -1,7 +1,7 @@
-path: ../dataset # dataset root dir
-train: train/images  # train images (relative to 'path') 4 images
-val: val/images  # val images (relative to 'path') 4 images
-test: test/images # test images 
+path: ../dataset
+train: train/images  
+val: val/images  
+test: test/images 
 
 names:
   0: 'License Plate'

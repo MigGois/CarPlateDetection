@@ -1,2 +1,8 @@
-runs/
-
+/runs/*
+!/runs
+/runs/detect/*
+!/runs/detect
+/runs/detect/train/*
+!/runs/detect/train
+/runs/detect/train/weights*
+!/runs/detect/train/weights

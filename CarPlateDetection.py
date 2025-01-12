@@ -204,6 +204,6 @@ def plot_labeled_data(mode='test', model=None):
     plt.show()
     
 if __name__ == "__main__":
-    model = YOLO("runs/detect/train30/weights/best.pt")
-    #results = model.train(data="Lamine.yaml", epochs=10, imgsz=640, device=0)
+    model = YOLO("runs/detect/train/weights/best.pt")
+    #results = model.train(data="Lamine.yaml", epochs=50, imgsz=640, device=0)
     plot_labeled_data(model=model)

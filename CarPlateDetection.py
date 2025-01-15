@@ -3,17 +3,17 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
-import random
-import pytesseract
-import easyocr
 import math
+from paddleocr import PaddleOCR
+import re
 
-IMG_DATA = "dataset/{}/images"
-LABELA_DATA = "dataset/{}/labels"
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
+IMG_DATA = "dataset/test/images/a3ad91fabd188be3.jpg"
+LABELA_DATA = "dataset/test/labels/a3ad91fabd188be3.txt"
 
-reader = easyocr.Reader(['en'])
+
+ocr = PaddleOCR(use_angle_cls = True, lang='en', show_log=False)
+
 
 def preprocess_bbox(bbox_data, img_height, img_width):
     
@@ -27,44 +27,6 @@ def preprocess_bbox(bbox_data, img_height, img_width):
     
     return [x1, y1, x2, y2]   
 
-
-def rotate_image(image, angle):
-    image_center = tuple(np.array(image.shape[1::-1]) / 2)
-    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
-    result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
-    return result
-
-def compute_skew(src_img):
-
-    if len(src_img.shape) == 3:
-        h, w, _ = src_img.shape
-    elif len(src_img.shape) == 2:
-        h, w = src_img.shape
-    else:
-        print('upsupported image type')
-
-    img = cv2.medianBlur(src_img, 3)
-
-    edges = cv2.Canny(img,  threshold1 = 30,  threshold2 = 100, apertureSize = 3, L2gradient = True)
-    lines = cv2.HoughLinesP(edges, 1, math.pi/180, 30, minLineLength=w / 4.0, maxLineGap=h/4.0)
-    if lines is None:
-        return 0.0
-    angle = 0.0
-
-    cnt = 0
-    for x1, y1, x2, y2 in lines[0]:
-        ang = np.arctan2(y2 - y1, x2 - x1)
-        #print(ang)
-        if math.fabs(ang) <= 30: # excluding extreme rotations
-            angle += ang
-            cnt += 1
-
-    if cnt == 0:
-        return 0.0
-    return (angle / cnt)*180/math.pi
-
-def deskew(src_img):
-    return rotate_image(src_img, compute_skew(src_img))
 
 def calculate_iou(bbox1, bbox2):
     x1, y1, w1, h1 = bbox1
@@ -89,29 +51,289 @@ def calculate_iou(bbox1, bbox2):
     union_area = area1 + area2 - inter_area
     return inter_area / union_area if union_area > 0 else 0
 
-def plateDetection(model, img, data, imgPath):
 
+def plateDetection(model, imgPath):
+
+    results = model.predict(source=imgPath)
+
+    boxes = results[0].boxes.cpu().numpy()
+    xyxys = boxes.xyxy
+
+    return xyxys # [x1, y1, x2, y2]
+
+
+def order_points(pts):
+
+    center = np.mean(pts) # Step 1: Find centre of object
+
+    shifted = pts - center # Step 2: Move coordinate system to centre of object
+
+    theta = np.arctan2(shifted[:, 0], shifted[:, 1]) # Step 3: Find angles subtended from centroid to each corner point
+
+    ind = np.argsort(theta) # Step 4: Return vertices ordered by theta
+
+    return pts[ind]
+
+
+def getContours(img, orig):  
+    biggest = np.array([])
+    maxArea = 300
+    imgContour = orig.copy()  
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    index = None
+    for i, cnt in enumerate(contours):
+        area = cv2.contourArea(cnt)
+        peri = cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt,0.02*peri, True)
+        
+
+        if area > maxArea and len(approx) == 4:
+            biggest = approx
+            maxArea = area
+            index = i 
+
+
+    warped = None  
+    if index is not None: 
+        cv2.drawContours(imgContour, contours, index, (255, 0, 0), 3)
+
+        src = np.squeeze(biggest).astype(np.float32) 
+        height = orig.shape[0]
+        width = orig.shape[1]
+        
+        dst = np.float32([[0, 0], [0, height - 1], [width - 1, 0], [width - 1, height - 1]])
+
+        biggest = order_points(src)
+        dst = order_points(dst)
+
+        M = cv2.getPerspectiveTransform(src, dst)
+
+        phi = math.atan2(M[2][1], M[2][2])
+        psi = math.atan2(M[1][0], M[0][0])
+
+        if math.cos(psi) == 0:
+            thetaa = math.atan2(-M[2][0], (M[1][0]/math.sin(psi)))
+        else:
+            thetaa = math.atan2(-M[2][0], (M[0][0]/math.cos(psi)))
+
+        pi = 22/7
+
+        phid = phi*(180/pi)
+        thetaad = thetaa*(180/pi)
+        psid = math.degrees(psi)
+
+        M = cv2.getPerspectiveTransform(src, dst)
+
+        if abs(psid) > 35:
+            psid = 0
+            print("Not Rotating")
+            M = np.zeros((3, 3))
+
+        img_shape = (width, height)
+        warped = cv2.warpPerspective(orig, M, img_shape, flags=cv2.INTER_LINEAR)
+ 
+    return biggest, imgContour, warped 
+
+    
+def post_processing(image):
+
+    img_h, img_w, _ = image.shape
+
+    if img_h < 640:
+        scale = round(640/img_h)
+        image = cv2.resize(image, (img_w * scale, img_h * scale), interpolation = cv2.INTER_LANCZOS4)
+
+    return image
+
+
+def image_processing(path):
+
+    processingResults = []
+
+    img = cv2.imread(path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img1 = img.copy()
+
+    platesCoords = plateDetection(model, path)
+
+    for plateCoord in platesCoords:
+
+        plateCoord = [int(plateCoord[0]), int(plateCoord[1]), int(plateCoord[2]), int(plateCoord[3])]
+
+        cv2.rectangle(
+            img1,
+            (plateCoord[0], plateCoord[1]),
+            (plateCoord[2], plateCoord[3]),
+            (36, 255, 12),
+            3,
+        )
+
+        carPlate = img[plateCoord[1]:plateCoord[3], plateCoord[0]:plateCoord[2]]
+
+        kernel = np.ones((3,3))
+
+        img_gray = cv2.cvtColor(carPlate, cv2.COLOR_RGB2GRAY) 
+
+        imgBlur = cv2.GaussianBlur(img_gray,(5,5),1)
+
+        imgCanny = cv2.Canny(imgBlur,100,200)
+
+        imgDila = cv2.dilate(imgCanny, kernel,iterations=2)
+
+        imgThres = cv2.erode(imgDila, kernel, iterations=2)
+
+        _, _, warped = getContours(imgThres, carPlate)
+
+        notWarped = False
+
+        if warped is None:
+            warped = carPlate.copy()
+            notWarped = True
+
+
+        result = post_processing(warped)
+        
+        result1 = ocr.ocr(result, cls=True)
+
+        data = ""
+
+        test = result1[0]
+
+        if test is None and not notWarped:
+            result = post_processing(carPlate)
+            result1 = ocr.ocr(result, cls=True)
+            test = result1[0]
+
+        if test is not None:
+            for res in test:
+                data += str(res[1][0])
+
+        data = re.sub(r'[^a-zA-Z0-9]', '', data)
+
+        
+        processingResults.append([result, data])
+
+    return processingResults
+
+
+def plate_accuracy():
+    files = os.listdir("dataset/test/images")
+
+    totalPlates = 0
+
+    foundPlates = 0
+
+    correctPlates = 0
+
+    for file in files:
+
+        img_path = "dataset/test/images/" + file
+
+        file = file.replace(".jpg", ".txt")
+
+        label_path = "dataset/test/plateLabels/" + file
+
+        results = image_processing(img_path)
+
+        lines = []
+
+        with open(label_path, 'r') as f:
+            lines = f.readlines()
+
+        for line in lines:
+            if line != "":
+               totalPlates += 1
+
+        for result in results:
+            
+            foundPlates += 1
+
+            for line in lines:
+
+                if result[1].upper() == line.upper().strip():
+                    correctPlates += 1
+
+    fp = round((foundPlates/totalPlates) * 100, 2)
+    cp = round((correctPlates/foundPlates) * 100, 2)
+
+    print("FoundPlates:", fp, "%")
+    print("CorrectPlates:", cp, "%")                    
+
+
+def plot_labeled_data(mode='train'):
+
+    fig = plt.figure(figsize=(20, 20)) 
+    rows = 4
+    columns = 4
+    plot_index = 1
+
+    results = image_processing(IMG_DATA)
+
+    image = cv2.imread(IMG_DATA)
+
+    image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    for result in results:
+        ax = fig.add_subplot(rows, columns, plot_index)
+
+        ax.imshow(result[0], cmap='gray')
+
+        ax.set_title(f"Plate {plot_index}\n Predicted: {result[1]}")
+        ax.axis('off')
+
+        plot_index += 1
+
+    ax = fig.add_subplot(rows, columns, plot_index)
+    ax.imshow(image1)
+    ax.set_title(f"Original Image")
+
+    plt.show()
+
+
+if __name__ == "__main__":
+    model = YOLO("runs/detect/train/weights/best.pt")
+    #model = YOLO("yolo11s.pt")
+    #results = model.train(data="Lamine.yaml", epochs=100, imgsz=640, device=0)
+    #plot_labeled_data()
+    plate_accuracy()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+""" def iou():
     results = model.predict(source=imgPath)
     img_h, img_w, _ = img.shape
 
     for result in results:
+
         boxes = result.boxes.cpu().numpy()
         xyxys = boxes.xyxy
         class_ids = boxes.cls.astype(int)
 
-    
-
         for xyxy, class_id in zip(xyxys, class_ids):
             print("Class id: ", class_id)
             bbox1 = [xyxy[0], xyxy[1], xyxy[2] - xyxy[0], xyxy[3] - xyxy[1]]
-
-            cv2.rectangle(
-                img,
-                (int(xyxy[0]), int(xyxy[1])),
-                (int(xyxy[2]), int(xyxy[3])),
-                (36, 255, 12),
-                3,
-            )
 
             best_iou = 0
             best_idx = -1
@@ -122,88 +344,4 @@ def plateDetection(model, img, data, imgPath):
                     best_iou = iou
                     best_idx = data.index(d)
 
-                    cv2.rectangle(
-                        img,
-                        (x1, y1),
-                        (x2, y2),
-                        (36, 255, 12),
-                        3,
-                    )
-
-            print("Best iou: ", best_iou)
-
-            #cv2.imshow("image", img)
-            #cv2.waitKey(0)
-
-            return xyxys # [x1, y1, x2, y2]
-
-            
-
-def plot_labeled_data(mode='test', model=None):
-
-    fig = plt.figure(figsize=(20, 20)) 
-    rows = 4
-    columns = 4
-    
-    imgs_list = os.listdir(IMG_DATA.format(mode))
-    random.shuffle(imgs_list)
-
-    #labels_list = os.listdir(LABELA_DATA.format(mode))
-    for i, img_name in enumerate(imgs_list[:16]):
-
-        imgPath = os.path.join(IMG_DATA.format(mode), img_name)
-
-        img = cv2.imread(imgPath)
-        
-        fl = open(os.path.join(LABELA_DATA.format(mode), img_name[:-3] + 'txt'), 'r')
-
-        data = fl.readlines()
-
-        platesCoords = plateDetection(model, img, data, imgPath)
-
-        fl.close()
-
-        if platesCoords is None:
-            continue
-
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        for plateCoord in platesCoords:
-
-            plateCoord = [int(plateCoord[0]), int(plateCoord[1]), int(plateCoord[2]), int(plateCoord[3])]
-
-            cv2.rectangle(
-                img,
-                (plateCoord[0], plateCoord[1]),
-                (plateCoord[2], plateCoord[3]),
-                (36, 255, 12),
-                3,
-            )
-
-            carPlate = img[plateCoord[1]:plateCoord[3], plateCoord[0]:plateCoord[2]]
-
-            carPlate = deskew(carPlate)
-
-            img_gray = cv2.cvtColor(carPlate, cv2.COLOR_RGB2GRAY) 
-
-            sharpened_image = cv2.filter2D(img_gray, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]) )
-
-            #ocr_result = pytesseract.image_to_string(gray_img, config='--psm 7')
-
-            result = reader.readtext(sharpened_image, detail = 0)
-
-        ax = fig.add_subplot(rows, columns, i+1) 
-        plt.subplots_adjust(hspace=0.5, wspace=0.5)
-        
-
-        #ax.set_title(f"Plate {i+1}\n Predicted: {ocr_result.strip()}")
-        ax.set_title(f"Plate {i+1}\n Predicted: {result}")
-
-        plt.imshow(sharpened_image, cmap='gray')
-        
-    plt.show()
-    
-if __name__ == "__main__":
-    model = YOLO("runs/detect/train/weights/best.pt")
-    #results = model.train(data="Lamine.yaml", epochs=50, imgsz=640, device=0)
-    plot_labeled_data(model=model)
+            print("Best iou: ", best_iou) """

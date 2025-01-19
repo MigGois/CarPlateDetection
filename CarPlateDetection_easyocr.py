@@ -3,17 +3,13 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
-from paddleocr import PaddleOCR
 import re
 import time
-import pytesseract
 import easyocr
 
 BLACKLIST = ['AL', 'AND', 'A', 'BY', 'B', 'BIH', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EST', 'FIN', 'F', 'D', 'GR', 'GB', 'H', 'IS', 'IRL', 'I', 'LV', 'FL', 'LT', 'L', 'M', 'MD', 'MC', 'MNE', 'NL', 'NMK', 'N', 'PL', 'P', 'RO', 'RSM', 'SRB', 'SK', 'SLO', 'E', 'S', 'UA', 'UK', 'V']
 
-ocr = PaddleOCR(use_angle_cls = True, lang='en', show_log=False)
-#pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract'
-#reader = easyocr.Reader(['en'])
+reader = easyocr.Reader(['en'])
 
 def preprocess_bbox(bbox_data, img_height, img_width):
     
@@ -92,6 +88,7 @@ def pre_processing(image):
     if img_h < 600:
         scale = round(600/img_h)
         image = cv2.resize(image, (img_w * scale, img_h * scale), interpolation = cv2.INTER_LANCZOS4) """
+        
     
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
@@ -124,26 +121,11 @@ def image_processing(path):
         carPlate = img[plateCoord[1]:plateCoord[3], plateCoord[0]:plateCoord[2]]
 
         result = pre_processing(carPlate)
-        
-        result1 = ocr.ocr(result, cls=True)
-
-        data = ""
-
-        #data = pytesseract.image_to_string(result, config='--psm 6')
-
-        """ data = reader.readtext(result)
+ 
+        data = reader.readtext(result)
 
         if data is not None: 
-            data = ' '.join([res[1] for res in data]) """
-        
-
-        test = result1[0]
-
-        if test is not None:
-            for res in test:
-                word = str(res[1][0])
-                if not(len(word) <= 3 and word in BLACKLIST):
-                    data += str(res[1][0])
+            data = ' '.join([res[1] for res in data]) 
 
         data = re.sub(r'[^a-zA-Z0-9]', '', data)
         
@@ -227,7 +209,6 @@ def plate_accuracy():
 
     ct = round((correctPlates/totalReadable) * 100, 2)
 
-
     print("PlateDetection".center(24, "-"))
     print(f"True Positive: {tp}")
     print(f"False Positive: {fp}")
@@ -238,7 +219,7 @@ def plate_accuracy():
 
     print()
     print("TextDetection".center(24, "-"))
-    print(f"CorrectText: {ct}%")    
+    print(f"CorrectText: {ct}%")  
 
     print()
     print("Time".center(24, "-"))

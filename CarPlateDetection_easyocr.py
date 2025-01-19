@@ -50,7 +50,7 @@ def calculate_iou(bbox1, bbox2):
 
 def find_iou(plateCoords, label_path, width, height):
 
-    plateCoords = [plateCoords[0], plateCoords[1], plateCoords[2] - plateCoords[0], plateCoords[3] - plateCoords[1]] 
+    plateCoords = [plateCoords[0], plateCoords[1], plateCoords[2] - plateCoords[0], plateCoords[3] - plateCoords[1]] # Conversao de coordenadas para x1, y1, w, h
     
     best_iou = 0
 
@@ -60,7 +60,7 @@ def find_iou(plateCoords, label_path, width, height):
     for line in lines:
 
         bbox = preprocess_bbox(line, height, width)
-        bbox = [bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]]
+        bbox = [bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]] # Conversao de coordenadas para x1, y1, w, h
 
         iou = calculate_iou(plateCoords, bbox)
 
@@ -102,7 +102,7 @@ def image_processing(path):
 
     img = cv2.imread(path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img1 = img.copy()
+    img1 = img.copy() # Copia para mostrar a imagem inalterada
 
     platesCoords = plateDetection(model, path)
 
@@ -118,16 +118,16 @@ def image_processing(path):
             3,
         )
 
-        carPlate = img[plateCoord[1]:plateCoord[3], plateCoord[0]:plateCoord[2]]
+        carPlate = img[plateCoord[1]:plateCoord[3], plateCoord[0]:plateCoord[2]] # Recortar a matricula da imagem
 
         result = pre_processing(carPlate)
  
         data = reader.readtext(result)
 
         if data is not None: 
-            data = ' '.join([res[1] for res in data]) 
+            data = ' '.join([res[1] for res in data])  # Juntar todas as leituras numa string
 
-        data = re.sub(r'[^a-zA-Z0-9]', '', data)
+        data = re.sub(r'[^a-zA-Z0-9]', '', data) # Filtro para só aceitar abecedario latim e numeros
         
         processingResults.append([result, data, plateCoord])
 
@@ -170,7 +170,7 @@ def plate_accuracy():
         with open(label_path, 'r') as f:
             lines = f.readlines()
 
-        for line in lines:
+        for line in lines: # Contagem da quantidade de matrículas legiveis
             if line != "" :
                 totalPlates += 1
                 if line.strip() != "-1": 

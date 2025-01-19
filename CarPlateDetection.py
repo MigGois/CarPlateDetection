@@ -3,17 +3,13 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
-import math
 from paddleocr import PaddleOCR
 import re
 import time
-from imutils import contours
 
-IMG_DATA = "dataset/test/images/a3ad91fabd188be3.jpg"
 BLACKLIST = ['AL', 'AND', 'A', 'BY', 'B', 'BIH', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EST', 'FIN', 'F', 'D', 'GR', 'GB', 'H', 'IS', 'IRL', 'I', 'LV', 'FL', 'LT', 'L', 'M', 'MD', 'MC', 'MNE', 'NL', 'NMK', 'N', 'PL', 'P', 'RO', 'RSM', 'SRB', 'SK', 'SLO', 'E', 'S', 'UA', 'UK', 'V']
 
 ocr = PaddleOCR(use_angle_cls = True, lang='en', show_log=False)
-
 
 def preprocess_bbox(bbox_data, img_height, img_width):
     
@@ -25,7 +21,7 @@ def preprocess_bbox(bbox_data, img_height, img_width):
     y1 = int((y - h / 2) * img_height)
     y2 = int((y + h / 2) * img_height)
     
-    return [x1, y1, x2, y2]   
+    return [x1, y1, x2, y2]
 
 
 def calculate_iou(bbox1, bbox2):
@@ -85,7 +81,7 @@ def plateDetection(model, imgPath):
 
 
     
-def post_processing(image):
+def pre_processing(image):
 
     """ img_h, img_w, _ = image.shape
 
@@ -93,9 +89,10 @@ def post_processing(image):
         scale = round(600/img_h)
         image = cv2.resize(image, (img_w * scale, img_h * scale), interpolation = cv2.INTER_LANCZOS4) """
     
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    rgbimage = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
     
-    return gray
+    return rgbimage
 
 
 def image_processing(path):
@@ -122,7 +119,7 @@ def image_processing(path):
 
         carPlate = img[plateCoord[1]:plateCoord[3], plateCoord[0]:plateCoord[2]]
 
-        result = post_processing(carPlate)
+        result = pre_processing(carPlate)
         
         result1 = ocr.ocr(result, cls=True)
 
@@ -155,6 +152,8 @@ def plate_accuracy():
 
     tp, fp, fn = 0, 0, 0
 
+    totalReadable = 0
+
     start_time = time.time()
     
 
@@ -178,8 +177,10 @@ def plate_accuracy():
             lines = f.readlines()
 
         for line in lines:
-            if line != "":
-               totalPlates += 1
+            if line != "" :
+                totalPlates += 1
+                if line.strip() != "-1": 
+                    totalReadable += 1
 
         for result in results:
             
@@ -187,15 +188,15 @@ def plate_accuracy():
 
             iou = find_iou(result[2], loc_plate_path, img_w, img_h)
 
-            if iou > 0.8:
+            if iou > 0.5:
                 tp += 1
             else:
                 fp += 1
 
             for line in lines:
-
-                #print("Resultado Modelo:", result[1].upper())
-                #print("Ground Truth:", line.upper().strip())
+                
+                print("Resultado Modelo:", result[1].upper())
+                print("Ground Truth:", line.upper().strip())
 
                 if result[1].upper() == line.upper().strip():
                     correctPlates += 1
@@ -212,7 +213,7 @@ def plate_accuracy():
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
-    cp = round((correctPlates/foundPlates) * 100, 2)
+    cp = round((correctPlates/totalReadable) * 100, 2)
 
 
     print("PlateDetection".center(24, "-"))
@@ -261,8 +262,8 @@ def plot_labeled_data(path):
 
 if __name__ == "__main__":
     model = YOLO("runs/detect/train/weights/best.pt")
-    #model = YOLO("yolo11s.pt")
+    #model = YOLO("yolo11m.pt")
     #results = model.train(data="Lamine.yaml", epochs=100, imgsz=640, device=0)
-    #plot_labeled_data("dataset/test/images/d8daed582e6cce2d.jpg")
+    #plot_labeled_data("dataset/test/images/5a122adbb1a776b7.jpg")
     plate_accuracy()
 

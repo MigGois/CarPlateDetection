@@ -6,10 +6,14 @@ from ultralytics import YOLO
 from paddleocr import PaddleOCR
 import re
 import time
+import pytesseract
+import easyocr
 
 BLACKLIST = ['AL', 'AND', 'A', 'BY', 'B', 'BIH', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EST', 'FIN', 'F', 'D', 'GR', 'GB', 'H', 'IS', 'IRL', 'I', 'LV', 'FL', 'LT', 'L', 'M', 'MD', 'MC', 'MNE', 'NL', 'NMK', 'N', 'PL', 'P', 'RO', 'RSM', 'SRB', 'SK', 'SLO', 'E', 'S', 'UA', 'UK', 'V']
 
 ocr = PaddleOCR(use_angle_cls = True, lang='en', show_log=False)
+#pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract'
+#reader = easyocr.Reader(['en'])
 
 def preprocess_bbox(bbox_data, img_height, img_width):
     
@@ -85,14 +89,14 @@ def pre_processing(image):
 
     """ img_h, img_w, _ = image.shape
 
-    if img_h < 500:
+    if img_h < 600:
         scale = round(600/img_h)
         image = cv2.resize(image, (img_w * scale, img_h * scale), interpolation = cv2.INTER_LANCZOS4) """
     
-    rgbimage = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
     
-    return rgbimage
+    return gray
 
 
 def image_processing(path):
@@ -124,6 +128,14 @@ def image_processing(path):
         result1 = ocr.ocr(result, cls=True)
 
         data = ""
+
+        #data = pytesseract.image_to_string(result, config='--psm 6')
+
+        """ data = reader.readtext(result)
+
+        if data is not None: 
+            data = ' '.join([res[1] for res in data]) """
+        
 
         test = result1[0]
 
@@ -213,7 +225,7 @@ def plate_accuracy():
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
-    cp = round((correctPlates/totalReadable) * 100, 2)
+    ct = round((correctPlates/totalReadable) * 100, 2)
 
 
     print("PlateDetection".center(24, "-"))
@@ -226,7 +238,7 @@ def plate_accuracy():
 
     print()
     print("TextDetection".center(24, "-"))
-    print(f"CorrectPlates: {cp}%")    
+    print(f"CorrectText: {ct}%")    
 
     print()
     print("Time".center(24, "-"))

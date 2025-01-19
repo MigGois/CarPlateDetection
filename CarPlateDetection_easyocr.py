@@ -127,7 +127,7 @@ def image_processing(path):
         if data is not None: 
             data = ' '.join([res[1] for res in data])  # Juntar todas as leituras numa string
 
-        data = re.sub(r'[^a-zA-Z0-9]', '', data) # Filtro para só aceitar abecedario latim e numeros
+        data = re.sub(r'[^a-zA-Z0-9]', '', data) # Filtro para so aceitar alfabeto latim e numeros
         
         processingResults.append([result, data, plateCoord])
 

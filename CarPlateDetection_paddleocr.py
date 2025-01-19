@@ -134,7 +134,7 @@ def image_processing(path):
                 if not(len(word) <= 3 and word in BLACKLIST): #Verificaçao de siglas europeias nas matriculas
                     data += str(res[1][0])
 
-        data = re.sub(r'[^a-zA-Z0-9]', '', data) # Filtro para só aceitar abecedario latim e numeros
+        data = re.sub(r'[^a-zA-Z0-9]', '', data) # Filtro para so aceitar alfabeto latim e numeros
         
         processingResults.append([result, data, plateCoord])
 
